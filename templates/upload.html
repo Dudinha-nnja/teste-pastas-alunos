@@ -81,6 +81,51 @@ const DOCUMENTOS = [
 const form = document.getElementById("form-documentos");
 const listaDiv = document.getElementById("lista-documentos");
 
+// Comprime uma foto no próprio navegador antes de enviar, redimensionando
+// para no máximo 1600px no lado maior e reexportando como JPEG. Fotos de
+// celular costumam vir com 5-10MB; depois disso costumam ficar bem abaixo
+// de 1MB, sem perder legibilidade do documento -- e o envio fica muito
+// mais rápido em conexão de celular.
+function comprimirImagem(arquivo) {
+  return new Promise((resolve, reject) => {
+    const imagem = new Image();
+    const leitor = new FileReader();
+
+    leitor.onload = (e) => { imagem.src = e.target.result; };
+    leitor.onerror = reject;
+
+    imagem.onload = () => {
+      const TAMANHO_MAX = 1600;
+      let { width, height } = imagem;
+
+      if (width > height && width > TAMANHO_MAX) {
+        height = Math.round((height * TAMANHO_MAX) / width);
+        width = TAMANHO_MAX;
+      } else if (height > TAMANHO_MAX) {
+        width = Math.round((width * TAMANHO_MAX) / height);
+        height = TAMANHO_MAX;
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext("2d").drawImage(imagem, 0, 0, width, height);
+
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) { reject(new Error("Falha ao comprimir imagem")); return; }
+          resolve(new File([blob], arquivo.name.replace(/\.\w+$/, ".jpg"), { type: "image/jpeg" }));
+        },
+        "image/jpeg",
+        0.75
+      );
+    };
+    imagem.onerror = reject;
+
+    leitor.readAsDataURL(arquivo);
+  });
+}
+
 function respostasAtuais() {
   const formData = new FormData(form);
   return {
@@ -123,11 +168,31 @@ form.addEventListener("submit", async (e) => {
   const statusDiv = document.getElementById("status-mensagem");
 
   btn.disabled = true;
-  btn.textContent = "Enviando...";
+  statusDiv.style.color = "#5f6368";
   statusDiv.textContent = "";
 
   try {
-    const formData = new FormData(form);
+    // Monta o FormData primeiro com os campos de texto, depois comprime
+    // cada foto antes de anexar -- mostrando progresso pro aluno, já que
+    // isso pode levar alguns segundos em conexão de celular.
+    const formData = new FormData();
+    const camposTexto = new FormData(form);
+    for (const [chave, valor] of camposTexto.entries()) {
+      if (!(valor instanceof File)) formData.append(chave, valor);
+    }
+
+    const inputsArquivo = Array.from(form.querySelectorAll('input[type="file"]')).filter(
+      (input) => input.files.length > 0
+    );
+
+    for (let i = 0; i < inputsArquivo.length; i++) {
+      const input = inputsArquivo[i];
+      btn.textContent = `Preparando fotos... (${i + 1}/${inputsArquivo.length})`;
+      const arquivoComprimido = await comprimirImagem(input.files[0]);
+      formData.append(input.name, arquivoComprimido);
+    }
+
+    btn.textContent = "Enviando documentação...";
     const resposta = await fetch("/enviar", { method: "POST", body: formData });
     const resultado = await resposta.json();
 
