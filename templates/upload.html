@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Envio de Documentação - ETEC Cursos</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 640px; margin: 0 auto; padding: 24px 16px; background: #f6f7f9; color: #1a1a1a; }
+  h1 { font-size: 1.4rem; }
+  .card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  label { display: block; font-weight: 600; margin-bottom: 6px; margin-top: 14px; }
+  input[type=text], select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 1rem; }
+  input[type=file] { width: 100%; margin-top: 6px; }
+  .doc-item { border: 1px solid #e0e0e0; border-radius: 8px; padding: 14px; margin-top: 12px; }
+  .doc-item.enviado { border-color: #34a853; background: #f0f9f1; }
+  .radio-group label { font-weight: 400; display: inline-flex; align-items: center; gap: 6px; margin-right: 16px; }
+  button { background: #1a73e8; color: white; border: none; padding: 14px 24px; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; width: 100%; margin-top: 20px; }
+  button:disabled { background: #999; }
+  .hidden { display: none; }
+  .status { margin-top: 10px; font-size: 0.9rem; }
+  small { color: #666; }
+</style>
+</head>
+<body>
+
+<h1>Envio de Documentação</h1>
+<p>Preencha seus dados e envie a foto de cada documento solicitado.</p>
+
+<form id="form-documentos">
+
+  <div class="card">
+    <label for="nome">Nome completo</label>
+    <input type="text" id="nome" name="nome" required>
+
+    <label for="curso">Curso</label>
+    <input type="text" id="curso" name="curso" required>
+
+    <label>Sexo</label>
+    <div class="radio-group">
+      <label><input type="radio" name="sexo" value="masculino" required> Masculino</label>
+      <label><input type="radio" name="sexo" value="feminino" required> Feminino</label>
+    </div>
+
+    <label>
+      <input type="checkbox" id="rg_sem_cpf" name="rg_sem_cpf">
+      Meu RG não possui o número do CPF impresso
+    </label>
+
+    <label>Você vai enviar:</label>
+    <div class="radio-group">
+      <label><input type="radio" name="tipo_certidao" value="nascimento" required> Certidão de Nascimento</label>
+      <label><input type="radio" name="tipo_certidao" value="casamento" required> Certidão de Casamento</label>
+    </div>
+  </div>
+
+  <div class="card" id="lista-documentos">
+    <!-- Preenchido via JS -->
+  </div>
+
+  <button type="submit" id="btn-enviar">Enviar Documentação</button>
+  <div class="status" id="status-mensagem"></div>
+</form>
+
+<script>
+// Espelha (no front) as mesmas regras condicionais definidas em
+// services/documentos_config.py no backend. O backend valida de novo,
+// então isso aqui é só para melhorar a experiência do aluno.
+const DOCUMENTOS = [
+  { id: "rg_frente", label: "RG - Frente", condicao: () => true },
+  { id: "rg_verso", label: "RG - Verso", condicao: () => true },
+  { id: "cpf", label: "CPF", condicao: (r) => r.rg_sem_cpf },
+  { id: "titulo_eleitor", label: "Título de Eleitor", condicao: () => true },
+  { id: "reservista", label: "Certificado de Reservista", condicao: (r) => r.sexo === "masculino" },
+  { id: "comprovante_residencia", label: "Comprovante de Residência", condicao: () => true },
+  { id: "certidao_nascimento", label: "Certidão de Nascimento", condicao: (r) => r.tipo_certidao === "nascimento" },
+  { id: "certidao_casamento", label: "Certidão de Casamento", condicao: (r) => r.tipo_certidao === "casamento" },
+  { id: "certificado_ensino_medio", label: "Certificado do Ensino Médio", condicao: () => true },
+  { id: "historico_ensino_medio", label: "Histórico do Ensino Médio", condicao: () => true },
+];
+
+const form = document.getElementById("form-documentos");
+const listaDiv = document.getElementById("lista-documentos");
+
+function respostasAtuais() {
+  const formData = new FormData(form);
+  return {
+    sexo: formData.get("sexo"),
+    rg_sem_cpf: document.getElementById("rg_sem_cpf").checked,
+    tipo_certidao: formData.get("tipo_certidao"),
+  };
+}
+
+function renderizarDocumentos() {
+  const respostas = respostasAtuais();
+  listaDiv.innerHTML = "<label style='margin-top:0'>Documentos</label>";
+
+  DOCUMENTOS.filter((doc) => doc.condicao(respostas)).forEach((doc) => {
+    const bloco = document.createElement("div");
+    bloco.className = "doc-item";
+    bloco.id = `bloco-${doc.id}`;
+    bloco.innerHTML = `
+      <label style="margin-top:0">${doc.label}</label>
+      <small>Toque para tirar uma foto ou escolher da galeria</small>
+      <input type="file" accept="image/*" capture="environment"
+             name="${doc.id}" id="input-${doc.id}" required>
+    `;
+    listaDiv.appendChild(bloco);
+  });
+}
+
+// Recalcula a lista de documentos exigidos sempre que o aluno muda uma resposta
+form.addEventListener("change", (e) => {
+  if (["sexo", "tipo_certidao"].includes(e.target.name) || e.target.id === "rg_sem_cpf") {
+    renderizarDocumentos();
+  }
+});
+
+renderizarDocumentos();
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById("btn-enviar");
+  const statusDiv = document.getElementById("status-mensagem");
+
+  btn.disabled = true;
+  btn.textContent = "Enviando...";
+  statusDiv.textContent = "";
+
+  try {
+    const formData = new FormData(form);
+    const resposta = await fetch("/enviar", { method: "POST", body: formData });
+    const resultado = await resposta.json();
+
+    if (resposta.ok) {
+      statusDiv.style.color = "#137333";
+      statusDiv.textContent = "Documentação enviada com sucesso!";
+      form.reset();
+      renderizarDocumentos();
+    } else {
+      statusDiv.style.color = "#c5221f";
+      statusDiv.textContent = resultado.erro || "Ocorreu um erro ao enviar.";
+    }
+  } catch (err) {
+    statusDiv.style.color = "#c5221f";
+    statusDiv.textContent = "Erro de conexão. Tente novamente.";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Enviar Documentação";
+  }
+});
+</script>
+
+</body>
+</html>
