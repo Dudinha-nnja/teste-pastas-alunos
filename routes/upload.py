@@ -15,6 +15,13 @@ def formulario():
 
 @upload_bp.route("/enviar", methods=["POST"])
 def enviar():
+    # DEBUG TEMPORARIO -- remover depois de confirmar o valor da env var
+    valor_bruto = current_app.config["DRIVE_PASTA_RAIZ_ID"]
+    current_app.logger.warning(
+        "DEBUG DRIVE_PASTA_RAIZ_ID = %r (tamanho=%d)",
+        valor_bruto, len(valor_bruto),
+    )
+
     nome = request.form.get("nome", "").strip()
     curso = request.form.get("curso", "").strip()
     sexo = request.form.get("sexo", "").strip()
@@ -48,15 +55,22 @@ def enviar():
     pdf_bytes = documentos_para_pdf_unico(imagens)
 
     drive = DriveClient(current_app.config["GOOGLE_CREDENTIALS_JSON"])
+
+    # Pasta do curso (nivel 1) e, dentro dela, a pasta do aluno (nivel 2).
+    # Se quiser SEM subpasta de curso, troque pasta_pai_id abaixo por
+    # current_app.config["DRIVE_PASTA_RAIZ_ID"] diretamente.
     pasta_curso_id = drive.obter_ou_criar_pasta(
         sanitizar_nome(curso), current_app.config["DRIVE_PASTA_RAIZ_ID"]
+    )
+    pasta_aluno_id = drive.obter_ou_criar_pasta(
+        sanitizar_nome(nome), pasta_curso_id
     )
 
     nome_arquivo = f"{sanitizar_nome(nome)}_{sanitizar_nome(curso)}.pdf"
 
     # Um único upload pro Drive, em vez de um por documento -- bem mais
     # rápido e evita o timeout que acontecia com 10 chamadas sequenciais.
-    upload_resultado = drive.enviar_pdf(nome_arquivo, pdf_bytes, pasta_curso_id)
+    upload_resultado = drive.enviar_pdf(nome_arquivo, pdf_bytes, pasta_aluno_id)
 
     registro = DocumentoEnviado(
         aluno_id=aluno.id,
