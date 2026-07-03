@@ -1,13 +1,10 @@
 """
-Cliente para o Google Drive, usando Service Account (mesmo padrão que já
-é usado no projeto financeiro da ETEC).
+Cliente para o Google Drive, usando Service Account.
 
-Pré-requisitos:
-1. A Service Account precisa ter o Google Drive API habilitado no projeto
-   do Google Cloud.
-2. A pasta raiz no Drive (DRIVE_PASTA_RAIZ_ID) precisa ser compartilhada
-   com o e-mail da service account (campo "client_email" dentro do JSON
-   de credenciais), com permissão de Editor.
+Modo usado aqui: Drive Compartilhado.
+A service account é adicionada como membro do Drive Compartilhado
+(papel "Gerente de conteúdo"), diretamente pela interface do Drive.
+Não precisa de delegação nem de DRIVE_USUARIO_DELEGADO.
 """
 
 import io
@@ -33,7 +30,17 @@ class DriveClient:
             f"name = '{nome}' and '{pasta_pai_id}' in parents "
             "and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
         )
-        resultado = self.service.files().list(q=query, fields="files(id, name)").execute()
+        resultado = (
+            self.service.files()
+            .list(
+                q=query,
+                fields="files(id, name)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+                corpora="allDrives",
+            )
+            .execute()
+        )
         arquivos = resultado.get("files", [])
         return arquivos[0]["id"] if arquivos else None
 
@@ -47,7 +54,11 @@ class DriveClient:
             "mimeType": "application/vnd.google-apps.folder",
             "parents": [pasta_pai_id],
         }
-        pasta = self.service.files().create(body=metadata, fields="id").execute()
+        pasta = (
+            self.service.files()
+            .create(body=metadata, fields="id", supportsAllDrives=True)
+            .execute()
+        )
         return pasta["id"]
 
     def enviar_pdf(self, nome_arquivo: str, pdf_bytes: bytes, pasta_id: str) -> dict:
@@ -55,7 +66,12 @@ class DriveClient:
         media = MediaIoBaseUpload(io.BytesIO(pdf_bytes), mimetype="application/pdf")
         arquivo = (
             self.service.files()
-            .create(body=metadata, media_body=media, fields="id, webViewLink")
+            .create(
+                body=metadata,
+                media_body=media,
+                fields="id, webViewLink",
+                supportsAllDrives=True,
+            )
             .execute()
         )
         return {"id": arquivo["id"], "url": arquivo.get("webViewLink")}
