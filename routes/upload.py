@@ -47,10 +47,7 @@ def enviar():
     imagens = [request.files[doc.id].read() for doc in obrigatorios]
     pdf_bytes = documentos_para_pdf_unico(imagens)
 
-    drive = DriveClient(
-        current_app.config["GOOGLE_CREDENTIALS_JSON"],
-        current_app.config["DRIVE_USUARIO_DELEGADO"],
-    )
+    drive = DriveClient(current_app.config["GOOGLE_CREDENTIALS_JSON"])
     pasta_curso_id = drive.obter_ou_criar_pasta(
         sanitizar_nome(curso), current_app.config["DRIVE_PASTA_RAIZ_ID"]
     )
