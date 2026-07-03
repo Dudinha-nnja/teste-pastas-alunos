@@ -3,7 +3,7 @@ from flask import Blueprint, current_app, jsonify, render_template, request
 from models import db, Aluno, DocumentoEnviado
 from services.documentos_config import documentos_aplicaveis
 from services.drive_client import DriveClient
-from services.pdf_converter import imagem_para_pdf, sanitizar_nome
+from services.pdf_converter import documentos_para_pdf_unico, sanitizar_nome
 
 upload_bp = Blueprint("upload", __name__)
 
@@ -42,32 +42,33 @@ def enviar():
     db.session.add(aluno)
     db.session.commit()
 
-    drive = DriveClient(current_app.config["GOOGLE_CREDENTIALS_JSON"])
+    # Junta as fotos de todos os documentos exigidos em um único PDF,
+    # uma página por documento, na ordem em que aparecem em DOCUMENTOS.
+    imagens = [request.files[doc.id].read() for doc in obrigatorios]
+    pdf_bytes = documentos_para_pdf_unico(imagens)
+
+    drive = DriveClient(
+        current_app.config["GOOGLE_CREDENTIALS_JSON"],
+        current_app.config["DRIVE_USUARIO_DELEGADO"],
+    )
     pasta_curso_id = drive.obter_ou_criar_pasta(
         sanitizar_nome(curso), current_app.config["DRIVE_PASTA_RAIZ_ID"]
     )
-    pasta_aluno_id = drive.obter_ou_criar_pasta(sanitizar_nome(nome), pasta_curso_id)
 
-    nome_arquivo_base = f"{sanitizar_nome(nome)}_{sanitizar_nome(curso)}"
-    resultados = []
+    nome_arquivo = f"{sanitizar_nome(nome)}_{sanitizar_nome(curso)}.pdf"
 
-    for doc in obrigatorios:
-        arquivo = request.files[doc.id]
-        pdf_bytes = imagem_para_pdf(arquivo.read())
-        nome_arquivo = f"{nome_arquivo_base}_{doc.id}.pdf"
+    # Um único upload pro Drive, em vez de um por documento -- bem mais
+    # rápido e evita o timeout que acontecia com 10 chamadas sequenciais.
+    upload_resultado = drive.enviar_pdf(nome_arquivo, pdf_bytes, pasta_curso_id)
 
-        upload_resultado = drive.enviar_pdf(nome_arquivo, pdf_bytes, pasta_aluno_id)
-
-        registro = DocumentoEnviado(
-            aluno_id=aluno.id,
-            tipo_documento=doc.id,
-            nome_arquivo=nome_arquivo,
-            drive_file_id=upload_resultado["id"],
-            drive_url=upload_resultado["url"],
-        )
-        db.session.add(registro)
-        resultados.append(nome_arquivo)
-
+    registro = DocumentoEnviado(
+        aluno_id=aluno.id,
+        tipo_documento="documentacao_completa",
+        nome_arquivo=nome_arquivo,
+        drive_file_id=upload_resultado["id"],
+        drive_url=upload_resultado["url"],
+    )
+    db.session.add(registro)
     db.session.commit()
 
-    return jsonify({"status": "ok", "aluno_id": aluno.id, "arquivos_enviados": resultados})
+    return jsonify({"status": "ok", "aluno_id": aluno.id, "arquivo_enviado": nome_arquivo})
