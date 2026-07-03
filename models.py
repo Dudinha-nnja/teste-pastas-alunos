@@ -9,6 +9,7 @@ class Aluno(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(200), nullable=False)
+    cpf = db.Column(db.String(20), nullable=True)
     curso = db.Column(db.String(200), nullable=False)
     sexo = db.Column(db.String(20), nullable=True)  # usado na regra do reservista
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
