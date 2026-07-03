@@ -26,19 +26,15 @@ def sanitizar_nome(texto: str) -> str:
     return texto_limpo
 
 
-def imagem_para_pdf(imagem_bytes: bytes) -> bytes:
+def _normalizar_imagem(imagem_bytes: bytes) -> bytes:
     """
     Recebe os bytes de uma imagem (jpg/png/etc, incluindo fotos tiradas
-    direto da câmera do celular) e devolve os bytes de um PDF de 1 página.
-
-    Faz uma normalização prévia com Pillow (corrige orientação EXIF de
-    fotos de celular, converte para RGB) antes de passar pro img2pdf,
-    porque img2pdf é estrito quanto ao formato de entrada.
+    direto da câmera do celular) e devolve os bytes de uma imagem JPEG
+    normalizada (orientação EXIF corrigida, modo RGB), pronta pro img2pdf,
+    que é estrito quanto ao formato de entrada.
     """
     imagem = Image.open(io.BytesIO(imagem_bytes))
 
-    # Corrige rotação automática de fotos tiradas com celular (muito comum
-    # a imagem vir "deitada" nos metadados EXIF sem isso).
     try:
         from PIL import ImageOps
 
@@ -52,6 +48,21 @@ def imagem_para_pdf(imagem_bytes: bytes) -> bytes:
     buffer_imagem = io.BytesIO()
     imagem.save(buffer_imagem, format="JPEG", quality=90)
     buffer_imagem.seek(0)
+    return buffer_imagem.read()
 
-    pdf_bytes = img2pdf.convert(buffer_imagem.read())
-    return pdf_bytes
+
+def imagem_para_pdf(imagem_bytes: bytes) -> bytes:
+    """
+    Recebe os bytes de uma imagem e devolve os bytes de um PDF de 1 página.
+    """
+    return img2pdf.convert(_normalizar_imagem(imagem_bytes))
+
+
+def documentos_para_pdf_unico(imagens: list[bytes]) -> bytes:
+    """
+    Recebe os bytes de várias imagens (uma por documento, na ordem em que
+    devem aparecer) e devolve os bytes de um único PDF com uma página por
+    imagem, na mesma ordem.
+    """
+    imagens_normalizadas = [_normalizar_imagem(img) for img in imagens]
+    return img2pdf.convert(imagens_normalizadas)
