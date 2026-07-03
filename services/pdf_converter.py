@@ -12,7 +12,6 @@ import unicodedata
 
 import img2pdf
 from PIL import Image
-from pypdf import PdfWriter
 
 
 def sanitizar_nome(texto: str) -> str:
@@ -67,18 +66,3 @@ def documentos_para_pdf_unico(imagens: list[bytes]) -> bytes:
     """
     imagens_normalizadas = [_normalizar_imagem(img) for img in imagens]
     return img2pdf.convert(imagens_normalizadas)
-
-
-def juntar_pdfs(pdfs_em_bytes: list[bytes]) -> bytes:
-    """
-    Recebe uma lista de PDFs (em bytes) e devolve um único PDF com todas
-    as páginas, na ordem em que os PDFs foram passados.
-    """
-    writer = PdfWriter()
-    for pdf_bytes in pdfs_em_bytes:
-        writer.append(io.BytesIO(pdf_bytes))
-
-    buffer_saida = io.BytesIO()
-    writer.write(buffer_saida)
-    buffer_saida.seek(0)
-    return buffer_saida.read()
